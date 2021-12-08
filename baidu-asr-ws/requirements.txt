@@ -1,0 +1,4 @@
+websocket-client
+pyzmq
+pyaudio
+python-decouple
