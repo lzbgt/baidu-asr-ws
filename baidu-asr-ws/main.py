@@ -6,6 +6,15 @@ import pyaudio
 import zmq
 import decouple
 import queue
+import logging
+import traceback
+
+logging.basicConfig(
+    format='%(asctime)s %(levelname)-8s %(message)s',
+    level=logging.INFO,
+    datefmt='%Y-%m-%d %H:%M:%S')
+
+log = logging.getLogger("some.logger")
 
 url = decouple.config(
     'api', 'wss://vop.baidu.com/realtime_asr?sn=e9046d79-ec33-443a-adc0-cdc5791764d8')
@@ -30,7 +39,6 @@ mClients = {}
 
 class MQ(object):
     router = None
-    started = False
     HEARTBEAT = 60*5
 
     def __init__(self):
@@ -43,13 +51,12 @@ class MQ(object):
         def rcv():
             while True:
                 msg = self.router.recv_multipart()
-                print(f'msg: {msg}')
+                log.info(f'msg: {msg}')
                 if len(msg) >= 2:
                     if str(msg[1]) == 'hello' or str(msg[1] == 'heartbeat'):
                         # register/update ts
                         mClients[msg[0]] = time.time()
-                        if not self.started:
-                            qRcv.put('start')
+                        qRcv.put('start')
                     elif str(msg[1]) == 'stop':
                         stop = True
                         for k in mClients:
@@ -59,9 +66,9 @@ class MQ(object):
                         if stop:
                             qRcv.put('stop')
                     else:
-                        print(f'unkown msg {msg[1]}')
+                        log.error(f'unkown msg {msg[1]}')
                 else:
-                    print(f'invalid msg: {len(msg)}')
+                    log.error(f'invalid msg: {len(msg)}')
 
         def send():
             while True:
@@ -74,35 +81,38 @@ class MQ(object):
                         try:
                             self.router.send_multipart(parts)
                         except Exception as e:
-                            print(f'exception send: {e}')
+                            log.error(f'exception send: {e}')
 
         threading.Thread(target=rcv).start()
         threading.Thread(target=send).start()
-        print('started mq')
+        log.info('started mq')
 
 
 def on_message(ws, message):
     #  {"end_time":62750,"err_msg":"OK","err_no":0,"log_id":530385024,"result":"语音识别。","sn":"e9046d79-ec33-443a-adc0-cdc5791764d8_ws_5","start_time":60860,"type":"FIN_TEXT"}
-    print("on msg: ", message)
+    log.info("on msg: %s", message)
     msg = json.loads(message)
     if 'err_no' in msg and msg['err_no'] == 0 and msg['type'] == 'FIN_TEXT':
         result = msg['result']
-        print('type of result: ', type(result))
         qSend.put(bytes(result, 'utf-8'))
+    elif 'err_no' in msg and msg['err_no'] == -3102:
+        ws.close()
 
 
 def on_error(ws, error):
-    print(error)
+    log.error(error)
     ws_connect()
 
 
 def on_close(ws, close_status_code, close_msg):
-    print("### closed ###")
+    log.info("### closed ###")
 
 
 def on_open(ws):
+    log.info('on open %s', ws)
+
     def run(*args):
-        print('ws connected')
+        log.info('ws connected')
         FPB = 16*2000  # buffer 2s
         audio = pyaudio.PyAudio()
         stream = audio.open(format=pyaudio.paInt16, channels=1, rate=16000,
@@ -123,21 +133,29 @@ def on_open(ws):
                 msg = None
 
             if msg == 'start' and state != 'started':
+                log.info('parent asr start pkt')
                 ws.send(json.dumps(start_data), websocket.ABNF.OPCODE_TEXT)
                 state = 'started'
 
             # send audio stream
             if state == 'started':
                 bytes = stream.read(16*160, exception_on_overflow=False)
-                ws.send(bytes, websocket.ABNF.OPCODE_BINARY)
+                try:
+                    ws.send(bytes, websocket.ABNF.OPCODE_BINARY)
+                except:
+                    log.error(traceback.format_exc())
+                    break
             elif msg == 'stop':
                 ws.send(fin, websocket.ABNF.OPCODE_TEXT)
                 state = ''
             else:
                 time.sleep(0.5)
 
+        ws_connect()
+        # exit original thread, new ws object will attch to on_* functions
+
     threading.Thread(target=run).start()
-    print("worker started")
+    log.info("worker started")
 
 
 def ws_connect():
