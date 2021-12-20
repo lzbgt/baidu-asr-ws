@@ -23,7 +23,7 @@ url = decouple.config(
 start_data = {
     "type": "START",
     "data": {
-        "appid": int(decouple.config('appid', 25299031)),
+        "appid": int(decouple.config('appid', 15299032)),
         "appkey": decouple.config('appkey', 'DSWFRHTyE0S0BbYfZYimU6wu'),
         "dev_pid": decouple.config('devid',  15372),
         "cuid": decouple.config('cuid', 'cuid1'),
