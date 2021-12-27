@@ -18,14 +18,14 @@ logging.basicConfig(
 log = logging.getLogger("some.logger")
 
 url = decouple.config(
-    'api', 'wss://vop.baidu.com/realtime_asr?sn=e9046d79-ec33-443a-adc0-cdc5791764d8')
+    'api', 'wss://vop.baidu.com/realtime_asr?sn=e9046d79-ec33-443a-adc0-cdc5791764da')
 
 # hint: swapid
 start_data = {
     "type": "START",
     "data": {
-        "appid": int(decouple.config('appid', 15299032)),
-        "appkey": decouple.config('appkey', 'DSWFRHTyE0S0BbYfZYimU6wu'),
+        "appid": int(decouple.config('appid', 25367815)),
+        "appkey": decouple.config('appkey', '2y6j2ECGvFlFKosdhom46zb8'),
         "dev_pid": decouple.config('devid',  15372),
         "cuid": decouple.config('cuid', 'cuid1'),
         "format": "pcm",
